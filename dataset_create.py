@@ -11,7 +11,7 @@ print("🚀 Starting VicReg dataset preparation")
 # 1️⃣ Load images from local folder
 # ----------------------------
 dataset_dir = Path("/home/sd6701/datasets/fall2025_deeplearning/cc3m_96px")
-all_images = sorted(dataset_dir.iterdir())[:10000]  # Take first 1000 images
+all_images = sorted(dataset_dir.iterdir())[:1000]  # Take first 1000 images
 print(f"✅ Total images selected: {len(all_images)}")
 
 # ----------------------------
@@ -36,7 +36,6 @@ print(f"✅ Folders created at {base_dir}")
 def save_images(img_list, folder):
     print(f"5️⃣ Copying {len(img_list)} images to {folder}...")
     for idx, img_path in enumerate(tqdm(img_list, desc=f"Copying to {folder}")):
-        # If you want, you can open and save via PIL to ensure format:
         img = Image.open(img_path)
         img.save(folder / f"{idx}.jpg")
     print(f"✅ Finished copying images to {folder}")
