@@ -11,8 +11,14 @@ print("🚀 Starting VicReg dataset preparation")
 # 1️⃣ Load images from local folder
 # ----------------------------
 dataset_dir = Path("/home/sd6701/datasets/fall2025_deeplearning/cc3m_96px")
-all_images = sorted(dataset_dir.iterdir())[:1000]  # Take first 1000 images
+
+# Collect all image files (jpg, png)
+all_images = sorted([p for p in dataset_dir.rglob("*") if p.suffix.lower() in [".jpg", ".png"]])[:10000]
+
 print(f"✅ Total images selected: {len(all_images)}")
+
+if len(all_images) == 0:
+    raise ValueError(f"No images found in {dataset_dir}!")
 
 # ----------------------------
 # 2️⃣ Split train/val (80/20)
@@ -45,3 +51,14 @@ save_images(val_imgs, val_dir)
 
 print("🎉 VicReg-ready dataset creation complete!")
 print(f"Dataset location: {base_dir}")
+
+
+# python main_vicreg.py \
+#   --data-dir "/Users/samprasmanueldsouza/Desktop/Home Work/datasets/mydataset_small" \
+#   --exp-dir "/Users/samprasmanueldsouza/Desktop/Home Work/experiments/vicreg_run" \
+#   --arch resnet50 \
+#   --epochs 100 \
+#   --batch-size 32 \
+#   --base-lr 0.03 \
+#   --device cpu \
+#   --world-size 1
