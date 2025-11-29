@@ -181,7 +181,9 @@ def main(args):
             )
             torch.save(state, args.exp_dir / "model.pth")
     if args.rank == 0:
-        torch.save(model.module.backbone.state_dict(), args.exp_dir / "resnet50.pth")
+        final_model = model.module if hasattr(model, "module") else model
+        torch.save(final_model.backbone.state_dict(), args.exp_dir / f"{args.arch}.pth")
+
 
 
 def adjust_learning_rate(args, optimizer, loader, step):
