@@ -147,10 +147,10 @@ def main(args):
         if args.distributed:
             sampler.set_epoch(epoch)
         for step, ((x, y), _) in enumerate(loader, start=epoch * len(loader)):
-            # x = x.cuda(gpu, non_blocking=True)
-            # y = y.cuda(gpu, non_blocking=True)
-            x = x.to("cpu")
-            y = y.to("cpu")
+            x = x.cuda(gpu, non_blocking=True)
+            y = y.cuda(gpu, non_blocking=True)
+            # x = x.to("cpu")
+            # y = y.to("cpu")
 
             lr = adjust_learning_rate(args, optimizer, loader, step)
 
