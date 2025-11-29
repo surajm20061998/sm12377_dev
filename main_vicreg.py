@@ -12,6 +12,8 @@ import math
 import os
 import sys
 import time
+import wandb
+
 
 # import dataset
 import torch
@@ -74,6 +76,15 @@ def get_arguments():
     parser.add_argument('--local_rank', default=-1, type=int)
     parser.add_argument('--dist-url', default='env://',
                         help='url used to set up distributed training')
+    
+    #wandb
+    parser.add_argument("--wandb-project", type=str, default=None,
+                        help="Weights & Biases project name (if set, enable W&B logging)")
+    parser.add_argument("--wandb-run-name", type=str, default=None,
+                        help="Optional W&B run name")
+    parser.add_argument("--wandb-mode", type=str, default="online",
+                        choices=["online", "offline", "disabled"],
+                        help="W&B mode: online, offline, or disabled")
 
     return parser
 
@@ -89,6 +100,15 @@ def main(args):
         stats_file = open(args.exp_dir / "stats.txt", "a", buffering=1)
         print(" ".join(sys.argv))
         print(" ".join(sys.argv), file=stats_file)
+
+        if args.wandb_project is not None and args.wandb_mode != "disabled":
+            wandb_run = wandb.init(
+                project=args.wandb_project,
+                name=args.wandb_run_name or args.exp_dir.name,
+                config=vars(args),
+                mode=args.wandb_mode,
+                dir=str(args.exp_dir),  # store wandb files inside exp_dir
+            )
 
     transforms = aug.TrainTransform()
 
@@ -176,7 +196,11 @@ def main(args):
                 )
                 print(json.dumps(stats))
                 print(json.dumps(stats), file=stats_file)
+                
+                if wandb_run is not None:
+                    wandb.log(stats)
                 last_logging = current_time
+
         if args.rank == 0:
             state = dict(
                 epoch=epoch + 1,
@@ -187,6 +211,10 @@ def main(args):
     if args.rank == 0:
         final_model = model.module if hasattr(model, "module") else model
         torch.save(final_model.backbone.state_dict(), args.exp_dir / f"{args.arch}.pth")
+    if args.rank == 0 and wandb_run is not None:
+        wandb_run.finish()
+
+
 
 
 
