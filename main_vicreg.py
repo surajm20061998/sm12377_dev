@@ -361,6 +361,7 @@ def handle_sigterm(signum, frame):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser('VICReg-training-script', parents=[get_arguments()])
     args = parser.parse_args()
+    args.distributed = False   # <<< ADD THIS LINE
     if not hasattr(args, 'rank'):
         args.rank = 0
     print(f"Running VICReg with args: {args}")
