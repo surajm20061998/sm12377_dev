@@ -80,7 +80,7 @@ def get_arguments():
 
 def main(args):
     torch.backends.cudnn.benchmark = True
-    init_distributed_mode(args)
+    # init_distributed_mode(args)
     print(args)
     gpu = torch.device(args.device)
 
