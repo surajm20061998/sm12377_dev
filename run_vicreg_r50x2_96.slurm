@@ -1,7 +1,7 @@
 #!/bin/bash
-#SBATCH --job-name=vicreg-r50x2-96
-#SBATCH --output=/home/sd6701/fall2025_deeplearning/logs/vicreg_r50x2-%j.out
-#SBATCH --error=/home/sd6701/fall2025_deeplearning/logs/vicreg_r50x2-%j.err
+#SBATCH --job-name=vicreg-r101-96
+#SBATCH --output=/home/sd6701/fall2025_deeplearning/logs/vicreg_r101-%j.out
+#SBATCH --error=/home/sd6701/fall2025_deeplearning/logs/vicreg_r101-%j.err
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=8
@@ -13,9 +13,9 @@
 
 echo "========================================"
 echo "Job ID: $SLURM_JOB_ID"
-echo "Node: $SLURMD_NODENAME"
+echo "Node: $SLURMD_NODENAME"s
 echo "Starting at: $(date)"
-echo "Model: VICReg ResNet-50x2 on cc3m_96px"
+echo "Model: VICReg ResNet-101 on cc3m_96px"
 echo "========================================"
 
 cd /home/sd6701/test/vicreg
