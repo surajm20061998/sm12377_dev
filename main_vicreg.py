@@ -98,7 +98,7 @@ def get_arguments():
     parser.add_argument(
         "--wandb-name",
         type=str,
-        default=None,
+        default="vicregr101-100k",
         help="WandB run name (optional)",
     )
     parser.add_argument(
@@ -107,6 +107,8 @@ def get_arguments():
         default="14abcf8b33d9a7f066dd1988891a00fec55f4030",  # <-- RECOMMENDED: don't hardcode here
         help="WandB API key (optional; better to set via env WANDB_API_KEY)",
     )
+    parser.add_argument("--enable-wandb", action="store_true", help="Enable WandB logging")
+
 
     return parser
 
@@ -125,15 +127,15 @@ def main(args):
         print(" ".join(sys.argv))
         print(" ".join(sys.argv), file=stats_file)
 
-        if args.wandb_project is not None and args.wandb_mode != "disabled":
+        if args.enable_wandb :
             if args.wandb_api_key:
                 wandb.login(key=args.wandb_api_key)
-            wandb_run = wandb.init(
+            wandb.init(
                 project=args.wandb_project,
-                name=args.wandb_run_name or args.exp_dir.name,
+                entity=args.wandb_entity,
+                name=args.wandb_name,
                 config=vars(args),
-                mode=args.wandb_mode,
-                dir=str(args.exp_dir),  # store wandb files inside exp_dir
+                dir=args.output_dir,
             )
 
     transforms = aug.TrainTransform()
