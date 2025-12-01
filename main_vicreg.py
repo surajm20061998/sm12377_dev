@@ -78,13 +78,35 @@ def get_arguments():
                         help='url used to set up distributed training')
     
     #wandb
-    parser.add_argument("--wandb-project", type=str, default=None,
-                        help="Weights & Biases project name (if set, enable W&B logging)")
-    parser.add_argument("--wandb-run-name", type=str, default=None,
-                        help="Optional W&B run name")
-    parser.add_argument("--wandb-mode", type=str, default="online",
-                        choices=["online", "offline", "disabled"],
-                        help="W&B mode: online, offline, or disabled")
+    parser.add_argument(
+        "--enable-wandb",
+        action="store_true",
+        help="Enable WandB logging",
+    )
+    parser.add_argument(
+        "--wandb-project",
+        type=str,
+        default="vicreg",
+        help="WandB project name",
+    )
+    parser.add_argument(
+        "--wandb-entity",
+        type=str,
+        default="sd6701-new-york-university",
+        help="WandB entity (team or username). If None, use your default account.",
+    )
+    parser.add_argument(
+        "--wandb-name",
+        type=str,
+        default=None,
+        help="WandB run name (optional)",
+    )
+    parser.add_argument(
+        "--wandb-api-key",
+        type=str,
+        default="14abcf8b33d9a7f066dd1988891a00fec55f4030",  # <-- RECOMMENDED: don't hardcode here
+        help="WandB API key (optional; better to set via env WANDB_API_KEY)",
+    )
 
     return parser
 
@@ -95,6 +117,8 @@ def main(args):
     print(args)
     gpu = torch.device(args.device)
 
+    wandb_run = None   # <<< add this line
+
     if args.rank == 0:
         args.exp_dir.mkdir(parents=True, exist_ok=True)
         stats_file = open(args.exp_dir / "stats.txt", "a", buffering=1)
@@ -102,6 +126,8 @@ def main(args):
         print(" ".join(sys.argv), file=stats_file)
 
         if args.wandb_project is not None and args.wandb_mode != "disabled":
+            if args.wandb_api_key:
+                wandb.login(key=args.wandb_api_key)
             wandb_run = wandb.init(
                 project=args.wandb_project,
                 name=args.wandb_run_name or args.exp_dir.name,

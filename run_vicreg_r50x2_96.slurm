@@ -34,15 +34,21 @@ echo "CUDA available: $(python -c 'import torch; print(torch.cuda.is_available()
 echo "GPU: $(python -c 'import torch; print(torch.cuda.get_device_name(0) if torch.cuda.is_available() else \"None\")')"
 echo "========================================"
 
+
 python main_vicreg.py \
   --data-dir /home/sd6701/datasets/fall2025_deeplearning/cc3m_96px_vicreg_final_exp \
   --exp-dir /home/sd6701/fall2025_deeplearning/outputs/vicreg_cc3m_resnet101/100k_dataset \
   --arch resnet101 \
   --epochs 15 \
   --batch-size 64 \
-  --base-lr 0.15 \
+  --base-lr 0.25 \
   --log-freq-time 5 \
-  --device cuda
+  --device cuda \
+  --enable-wandb \
+  --wandb-project dl_final_vicreg \
+  --wandb-entity sd6701-new-york-university \
+  --wandb-name r101_cc3m_100k
+
 
 echo "========================================"
 echo "Finished at: $(date)"
