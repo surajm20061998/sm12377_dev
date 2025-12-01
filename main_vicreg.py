@@ -107,7 +107,6 @@ def get_arguments():
         default="14abcf8b33d9a7f066dd1988891a00fec55f4030",  # <-- RECOMMENDED: don't hardcode here
         help="WandB API key (optional; better to set via env WANDB_API_KEY)",
     )
-    parser.add_argument("--enable-wandb", action="store_true", help="Enable WandB logging")
 
 
     return parser
