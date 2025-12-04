@@ -39,22 +39,9 @@ def unzip(zip_path, dest_dir, rename_prefix=None):
                 shutil.copyfileobj(source, target)
     print(f"✅ Finished extracting {zip_path}")
 
-# -----------------------------
-# Step 1: Extract ZIPs
-# -----------------------------
-cc3m_zips = [
-    "/home/sd6701/datasets/fall2025_deeplearning/cc3m_96px_part1.zip",
-    "/home/sd6701/datasets/fall2025_deeplearning/cc3m_96px_part2.zip",
-    "/home/sd6701/datasets/fall2025_deeplearning/cc3m_96px_part3.zip",
-    "/home/sd6701/datasets/fall2025_deeplearning/cc3m_96px_part4.zip",
-    "/home/sd6701/datasets/fall2025_deeplearning/cc3m_96px_part5.zip"
-]
 
 ys2krqw_zip = "/home/sd6701/datasets/fall2025_deeplearning/trImgs/ys2krqw.zip"
 
-print("🔹 Extracting CC3M zips...")
-for zip_file in cc3m_zips:
-    unzip(zip_file, combined_dir)
 
 print("🔹 Extracting ys2krqw.zip with xyz_ prefix...")
 unzip(ys2krqw_zip, combined_dir, rename_prefix="xyz")
