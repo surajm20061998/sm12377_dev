@@ -1,10 +1,3 @@
-# Copyright (c) Meta Platforms, Inc. and affiliates.
-# All rights reserved.
-
-# This source code is licensed under the license found in the
-# LICENSE file in the root directory of this source tree.
-
-
 from PIL import ImageOps, ImageFilter
 import numpy as np
 import torchvision.transforms as transforms
@@ -38,8 +31,9 @@ class TrainTransform(object):
     def __init__(self):
         self.transform = transforms.Compose(
             [
+                # was 224
                 transforms.RandomResizedCrop(
-                    224, interpolation=InterpolationMode.BICUBIC
+                    96, interpolation=InterpolationMode.BICUBIC
                 ),
                 transforms.RandomHorizontalFlip(p=0.5),
                 transforms.RandomApply(
@@ -61,8 +55,9 @@ class TrainTransform(object):
         )
         self.transform_prime = transforms.Compose(
             [
+                # was 224
                 transforms.RandomResizedCrop(
-                    224, interpolation=InterpolationMode.BICUBIC
+                    96, interpolation=InterpolationMode.BICUBIC
                 ),
                 transforms.RandomHorizontalFlip(p=0.5),
                 transforms.RandomApply(
