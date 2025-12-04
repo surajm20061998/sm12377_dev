@@ -8,7 +8,7 @@ from pathlib import Path
 # -----------------------------
 # Paths
 # -----------------------------
-base_dir = Path("/home/sd6701/datasets/fall2025_deeplearning/cc3m_96px_vicreg_final_exp")
+base_dir = Path("/home/sd6701/datasets/dl_vicreg_final_exp_dataset")
 train_dir = base_dir / "train" / "class1"
 val_dir = base_dir / "val" / "class1"
 
