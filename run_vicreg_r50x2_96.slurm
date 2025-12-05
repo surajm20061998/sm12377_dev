@@ -7,7 +7,7 @@
 #SBATCH --cpus-per-task=8
 #SBATCH --gres=gpu:1               # or gpu:a100:1 if your cluster uses that syntax
 #SBATCH --mem=80G
-#SBATCH --time=36:00:00
+#SBATCH --time=10:00:00
 #SBATCH --partition=c12m85-a100-1  # change if you use a different partition
 #SBATCH --account=csci_ga_2572-2025fa
 
@@ -38,8 +38,8 @@ python main_vicreg.py \
   --data-dir /home/sd6701/datasets/dl_vicreg_final_exp_dataset_v2/all_images/train \
   --exp-dir /home/sd6701/fall2025_deeplearning/final-opts/vicreg_cc3m_resnet50x2_v11/ \
   --arch resnet50x2 \
-  --epochs 400 \
-  --batch-size 512 \
+  --epochs 20 \
+  --batch-size 1024 \
   --base-lr 0.275 \
   --log-freq-time 5 \
   --device cuda \
