@@ -17,7 +17,6 @@ set -euo pipefail
 
 mkdir -p /home/sd6701/fall2025_deeplearning/logs
 
-source /home/sd6701/miniconda3/etc/profile.d/conda.sh
-conda activate vicreg
 
-python -u dataset_create.py
+
+sh data.sh
