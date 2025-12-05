@@ -8,6 +8,7 @@ ZIP_URLS=(
     "https://huggingface.co/datasets/sm12377/tr_imgs/resolve/main/tr_imgs_part06.zip"
 )
 
+
 TARGET_DIR="/home/sd6701/datasets/dl_vicreg_final_exp_dataset_v2/all_images/train"
 TMP_DIR="/tmp/zip_extract"
 
