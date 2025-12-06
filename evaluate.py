@@ -19,8 +19,14 @@ import urllib
 from torch import nn, optim
 from torchvision import datasets, transforms
 import torch
+import numpy as np
+import torch.nn.functional as F
 
 import resnet
+try:
+    import faiss
+except Exception:
+    faiss = None
 
 
 def get_arguments():
@@ -98,6 +104,22 @@ def get_arguments():
         metavar="N",
         help="number of data loader workers",
     )
+
+    parser.add_argument("--eval-types", type=str, default="linear,knn")
+    parser.add_argument("--use-amp-eval", dest="use_amp_eval", action="store_true")
+    parser.add_argument("--no-amp-eval", dest="use_amp_eval", action="store_false")
+    parser.set_defaults(use_amp_eval=True)
+    parser.add_argument("--knn-k", type=int, default=200)
+    parser.add_argument("--knn-t", type=float, default=0.1)
+    parser.add_argument("--faiss-gpu", dest="faiss_gpu", action="store_true")
+    parser.add_argument("--no-faiss-gpu", dest="faiss_gpu", action="store_false")
+    parser.set_defaults(faiss_gpu=torch.cuda.is_available())
+    parser.add_argument("--knn-cache", type=Path, default=None)
+    parser.add_argument("--knn-every-epoch", action="store_true", default=False)
+    parser.add_argument("--persistent-workers", dest="persistent_workers", action="store_true")
+    parser.add_argument("--no-persistent-workers", dest="persistent_workers", action="store_false")
+    parser.set_defaults(persistent_workers=True)
+    parser.add_argument("--prefetch-factor", type=int, default=4)
 
     return parser
 
@@ -224,82 +246,236 @@ def main_worker(gpu, args):
         num_workers=args.workers,
         pin_memory=True,
     )
+    if args.workers > 0:
+        kwargs.update(dict(persistent_workers=args.persistent_workers, prefetch_factor=args.prefetch_factor))
     train_loader = torch.utils.data.DataLoader(
         train_dataset, sampler=train_sampler, **kwargs
     )
     val_loader = torch.utils.data.DataLoader(val_dataset, **kwargs)
 
     start_time = time.time()
-    for epoch in range(start_epoch, args.epochs):
-        # train
-        if args.weights == "finetune":
-            model.train()
-        elif args.weights == "freeze":
+    linear_enabled = "linear" in args.eval_types.split(",")
+    if linear_enabled:
+        for epoch in range(start_epoch, args.epochs):
+            # train
+            if args.weights == "finetune":
+                model.train()
+            elif args.weights == "freeze":
+                model.eval()
+            else:
+                assert False
+            train_sampler.set_epoch(epoch)
+            for step, (images, target) in enumerate(
+                train_loader, start=epoch * len(train_loader)
+            ):
+                output = model(images.cuda(gpu, non_blocking=True))
+                loss = criterion(output, target.cuda(gpu, non_blocking=True))
+                optimizer.zero_grad()
+                loss.backward()
+                optimizer.step()
+                if step % args.print_freq == 0:
+                    torch.distributed.reduce(loss.div_(args.world_size), 0)
+                    if args.rank == 0:
+                        pg = optimizer.param_groups
+                        lr_head = pg[0]["lr"]
+                        lr_backbone = pg[1]["lr"] if len(pg) == 2 else 0
+                        stats = dict(
+                            epoch=epoch,
+                            step=step,
+                            lr_backbone=lr_backbone,
+                            lr_head=lr_head,
+                            loss=loss.item(),
+                            time=int(time.time() - start_time),
+                        )
+                        print(json.dumps(stats))
+                        print(json.dumps(stats), file=stats_file)
+
+            # evaluate
             model.eval()
-        else:
-            assert False
-        train_sampler.set_epoch(epoch)
-        for step, (images, target) in enumerate(
-            train_loader, start=epoch * len(train_loader)
-        ):
-            output = model(images.cuda(gpu, non_blocking=True))
-            loss = criterion(output, target.cuda(gpu, non_blocking=True))
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
-            if step % args.print_freq == 0:
-                torch.distributed.reduce(loss.div_(args.world_size), 0)
-                if args.rank == 0:
-                    pg = optimizer.param_groups
-                    lr_head = pg[0]["lr"]
-                    lr_backbone = pg[1]["lr"] if len(pg) == 2 else 0
-                    stats = dict(
-                        epoch=epoch,
-                        step=step,
-                        lr_backbone=lr_backbone,
-                        lr_head=lr_head,
-                        loss=loss.item(),
-                        time=int(time.time() - start_time),
+            if args.rank == 0:
+                top1 = AverageMeter("Acc@1")
+                top5 = AverageMeter("Acc@5")
+                with torch.no_grad():
+                    for images, target in val_loader:
+                        with torch.cuda.amp.autocast(enabled=args.use_amp_eval and torch.cuda.is_available()):
+                            output = model(images.cuda(gpu, non_blocking=True))
+                        acc1, acc5 = accuracy(
+                            output, target.cuda(gpu, non_blocking=True), topk=(1, 5)
+                        )
+                        top1.update(acc1[0].item(), images.size(0))
+                        top5.update(acc5[0].item(), images.size(0))
+                best_acc.top1 = max(best_acc.top1, top1.avg)
+                best_acc.top5 = max(best_acc.top5, top5.avg)
+                stats = dict(
+                    epoch=epoch,
+                    acc1=top1.avg,
+                    acc5=top5.avg,
+                    best_acc1=best_acc.top1,
+                    best_acc5=best_acc.top5,
+                )
+                print(json.dumps(stats))
+                print(json.dumps(stats), file=stats_file)
+                if "knn" in args.eval_types.split(",") and (epoch == args.epochs - 1 or args.knn_every_epoch):
+                    run_knn_eval(
+                        backbone,
+                        traindir,
+                        valdir,
+                        normalize,
+                        args,
+                        gpu,
+                        stats_file,
+                        kwargs["batch_size"],
+                        epoch,
                     )
-                    print(json.dumps(stats))
-                    print(json.dumps(stats), file=stats_file)
 
-        # evaluate
+            scheduler.step()
+            if args.rank == 0:
+                state = dict(
+                    epoch=epoch + 1,
+                    best_acc=best_acc,
+                    model=model.state_dict(),
+                    optimizer=optimizer.state_dict(),
+                    scheduler=scheduler.state_dict(),
+                )
+                torch.save(state, args.exp_dir / "checkpoint.pth")
+    else:
+        # Only kNN evaluation
         model.eval()
-        if args.rank == 0:
-            top1 = AverageMeter("Acc@1")
-            top5 = AverageMeter("Acc@5")
-            with torch.no_grad():
-                for images, target in val_loader:
-                    output = model(images.cuda(gpu, non_blocking=True))
-                    acc1, acc5 = accuracy(
-                        output, target.cuda(gpu, non_blocking=True), topk=(1, 5)
-                    )
-                    top1.update(acc1[0].item(), images.size(0))
-                    top5.update(acc5[0].item(), images.size(0))
-            best_acc.top1 = max(best_acc.top1, top1.avg)
-            best_acc.top5 = max(best_acc.top5, top5.avg)
-            stats = dict(
-                epoch=epoch,
-                acc1=top1.avg,
-                acc5=top5.avg,
-                best_acc1=best_acc.top1,
-                best_acc5=best_acc.top5,
+        if args.rank == 0 and "knn" in args.eval_types.split(","):
+            run_knn_eval(
+                backbone,
+                traindir,
+                valdir,
+                normalize,
+                args,
+                gpu,
+                stats_file,
+                kwargs["batch_size"],
+                0,
             )
-            print(json.dumps(stats))
-            print(json.dumps(stats), file=stats_file)
+        return
 
-        scheduler.step()
-        if args.rank == 0:
-            state = dict(
-                epoch=epoch + 1,
-                best_acc=best_acc,
-                model=model.state_dict(),
-                optimizer=optimizer.state_dict(),
-                scheduler=scheduler.state_dict(),
-            )
-            torch.save(state, args.exp_dir / "checkpoint.pth")
 
+def extract_features_numpy(backbone, loader, gpu, use_amp):
+    features = []
+    labels = []
+    backbone.eval()
+    with torch.no_grad():
+        for images, target in loader:
+            images = images.cuda(gpu, non_blocking=True)
+            with torch.cuda.amp.autocast(enabled=use_amp and torch.cuda.is_available()):
+                feat = backbone(images)
+            feat = F.normalize(feat, dim=1)
+            features.append(feat.detach().cpu())
+            labels.append(target.clone().cpu())
+    features = torch.cat(features, dim=0).numpy()
+    labels = torch.cat(labels, dim=0).numpy()
+    return features.astype("float32"), labels.astype("int64")
+
+
+def knn_acc_from_neighbors(train_labels, D, I, val_labels, num_classes, T):
+    weights = torch.from_numpy(np.exp(D / T).astype("float32"))
+    nbr_labels = torch.from_numpy(train_labels[I].astype("int64"))
+    nq = weights.size(0)
+    class_scores = torch.zeros((nq, num_classes), dtype=torch.float32)
+    class_scores.scatter_add_(1, nbr_labels, weights)
+    top5 = class_scores.topk(5, dim=1).indices
+    gt = torch.from_numpy(val_labels.astype("int64"))
+    correct1 = (top5[:, 0] == gt).float().sum().item()
+    correct5 = (top5 == gt.unsqueeze(1)).any(dim=1).float().sum().item()
+    acc1 = 100.0 * correct1 / nq
+    acc5 = 100.0 * correct5 / nq
+    return acc1, acc5
+
+
+def run_knn_eval(backbone, traindir, valdir, normalize, args, gpu, stats_file, batch_size, epoch):
+    val_transform = transforms.Compose([
+        transforms.Resize(256),
+        transforms.CenterCrop(224),
+        transforms.ToTensor(),
+        normalize,
+    ])
+    train_eval_dataset = datasets.ImageFolder(traindir, val_transform)
+    val_eval_dataset = datasets.ImageFolder(valdir, val_transform)
+    if args.train_percent in {1, 10}:
+        subset = []
+        for fname in args.train_files:
+            fname = fname.decode().strip()
+            cls = fname.split("_")[0]
+            subset.append((traindir / cls / fname, train_eval_dataset.class_to_idx[cls]))
+        train_eval_dataset.samples = subset
+    eval_kwargs = dict(
+        batch_size=batch_size,
+        num_workers=args.workers,
+        pin_memory=True,
+    )
+    if args.workers > 0:
+        eval_kwargs.update(dict(persistent_workers=args.persistent_workers, prefetch_factor=args.prefetch_factor))
+    train_loader_eval = torch.utils.data.DataLoader(train_eval_dataset, shuffle=False, **eval_kwargs)
+    val_loader_eval = torch.utils.data.DataLoader(val_eval_dataset, shuffle=False, **eval_kwargs)
+
+    if args.knn_cache is not None and args.knn_cache.is_file():
+        cache = np.load(args.knn_cache, allow_pickle=False)
+        train_feats = cache["train_feats"]
+        train_labels = cache["train_labels"]
+        val_feats = cache["val_feats"]
+        val_labels = cache["val_labels"]
+    else:
+        train_feats, train_labels = extract_features_numpy(backbone, train_loader_eval, gpu, args.use_amp_eval)
+        val_feats, val_labels = extract_features_numpy(backbone, val_loader_eval, gpu, args.use_amp_eval)
+        if args.knn_cache is not None:
+            np.savez(args.knn_cache, train_feats=train_feats, train_labels=train_labels, val_feats=val_feats, val_labels=val_labels)
+
+    num_classes = int(max(train_labels.max(), val_labels.max())) + 1
+
+    if faiss is not None:
+        d = int(train_feats.shape[1])
+        index = faiss.IndexFlatIP(d)
+        if args.faiss_gpu and torch.cuda.is_available() and hasattr(faiss, "StandardGpuResources"):
+            res = faiss.StandardGpuResources()
+            index = faiss.index_cpu_to_gpu(res, gpu, index)
+        add_bs = 100000
+        for start in range(0, train_feats.shape[0], add_bs):
+            index.add(train_feats[start:start+add_bs])
+        D_list, I_list = [], []
+        search_bs = 10000
+        for start in range(0, val_feats.shape[0], search_bs):
+            D_part, I_part = index.search(val_feats[start:start+search_bs], args.knn_k)
+            D_list.append(D_part)
+            I_list.append(I_part)
+        D = np.concatenate(D_list, axis=0)
+        I = np.concatenate(I_list, axis=0)
+        acc1, acc5 = knn_acc_from_neighbors(train_labels, D, I, val_labels, num_classes, args.knn_t)
+    else:
+        train_t = torch.from_numpy(train_feats)
+        val_t = torch.from_numpy(val_feats)
+        if torch.cuda.is_available():
+            device = torch.device(f"cuda:{gpu}")
+            train_t = train_t.to(device)
+            val_t = val_t.to(device)
+        Nq = val_t.size(0)
+        topk = args.knn_k
+        D_list = []
+        I_list = []
+        chunk = min(Nq, 1024)
+        for i in range(0, Nq, chunk):
+            q = val_t[i:i+chunk]
+            sims = torch.matmul(q, train_t.t())
+            vals, inds = torch.topk(sims, k=topk, dim=1, largest=True, sorted=True)
+            D_list.append(vals.cpu().numpy())
+            I_list.append(inds.cpu().numpy())
+        D = np.concatenate(D_list, axis=0)
+        I = np.concatenate(I_list, axis=0)
+        acc1, acc5 = knn_acc_from_neighbors(train_labels, D, I, val_labels, num_classes, args.knn_t)
+
+    stats = dict(
+        epoch=epoch,
+        knn_acc1=acc1,
+        knn_acc5=acc5,
+    )
+    print(json.dumps(stats))
+    print(json.dumps(stats), file=stats_file)
+    return stats
 
 def handle_sigusr1(signum, frame):
     os.system(f'scontrol requeue {os.getenv("SLURM_JOB_ID")}')
