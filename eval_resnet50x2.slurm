@@ -2,7 +2,7 @@
 #SBATCH --job-name=eval_r50x2
 #SBATCH --output=/scratch/sm12377/eval/resnet50x2/slurm.out
 #SBATCH --error=/scratch/sm12377/eval/resnet50x2/slurm.err
-#SBATCH --partition=g2-standard-12
+#SBATCH --partition=c12m85-a100-1
 #SBATCH --gres=gpu:1
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=32G
