@@ -2,11 +2,12 @@
 #SBATCH --job-name=eval_r50x2
 #SBATCH --output=/scratch/sm12377/eval/resnet50x2/slurm.out
 #SBATCH --error=/scratch/sm12377/eval/resnet50x2/slurm.err
-#SBATCH --partition=c12m85-a100-1
+#SBATCH --partition=g2-standard-12
 #SBATCH --gres=gpu:1
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=32G
 #SBATCH --time=04:00:00
+#SBATCH --account=csci_ga_2572-2025fa
 
 # LOAD CORRECT CONDA
 source /scratch/sm12377/miniconda3/etc/profile.d/conda.sh
